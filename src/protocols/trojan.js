@@ -1,3 +1,5 @@
+/* eslint-disable no-undef */
+/* eslint-disable no-unused-vars */
 import { connect } from 'cloudflare:sockets';
 import { sha224 } from 'js-sha256';
 
@@ -38,7 +40,7 @@ export async function TROverWSHandler(request) {
                         portRemote = 443,
                         addressRemote = "",
                         rawClientData,
-                    } = await parseTRHeader(chunk);
+                    } = parseTRHeader(chunk);
 
                     address = addressRemote;
                     portWithRandomLog = `${portRemote}--${Math.random()} tcp`;
@@ -69,7 +71,7 @@ export async function TROverWSHandler(request) {
     });
 }
 
-async function parseTRHeader(buffer) {
+function parseTRHeader(buffer) {
     if (buffer.byteLength < 56) {
         return {
             hasError: true,
@@ -127,7 +129,7 @@ async function parseTRHeader(buffer) {
             addressIndex += 1;
             address = new TextDecoder().decode(socks5DataBuffer.slice(addressIndex, addressIndex + addressLength));
             break;
-        case 4:
+        case 4: {
             addressLength = 16;
             const dataView = new DataView(socks5DataBuffer.slice(addressIndex, addressIndex + addressLength));
             const ipv6 = [];
@@ -136,6 +138,7 @@ async function parseTRHeader(buffer) {
             }
             address = ipv6.join(":");
             break;
+        }
         default:
             return {
                 hasError: true,
@@ -197,12 +200,23 @@ async function handleTCPOutBound(
 
     // if the cf connect tcp socket have no incoming data, we retry to redirect ip
     async function retry() {
+        let proxyIP, proxyIpPort;
         const EncodedPanelProxyIPs = globalThis.pathName.split('/')[2] || '';
         const proxyIPs = atob(EncodedPanelProxyIPs) || globalThis.proxyIPs;
         const finalProxyIPs = proxyIPs.split(',').map(ip => ip.trim());
-        const proxyIP = finalProxyIPs[Math.floor(Math.random() * finalProxyIPs.length)];
+        proxyIP = finalProxyIPs[Math.floor(Math.random() * finalProxyIPs.length)];
+        if (proxyIP.includes(']:')) {
+            const match = proxyIP.match(/^(\[.*?\]):(\d+)$/);
+            proxyIP = match[1];
+            proxyIpPort = +match[2];
+        }
 
-        const tcpSocket = await connectAndWrite(proxyIP || addressRemote, portRemote);
+        if (proxyIP.split(':').length === 2) {
+            proxyIP = proxyIP.split(':')[0];
+            proxyIpPort = +proxyIP.split(':')[1];
+        }
+
+        const tcpSocket = await connectAndWrite(proxyIP || addressRemote, proxyIpPort || portRemote);
         // no matter retry success or not, close websocket
         tcpSocket.closed
             .catch((error) => {

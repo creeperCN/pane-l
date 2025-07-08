@@ -1,3 +1,5 @@
+/* eslint-disable no-unused-vars */
+/* eslint-disable no-undef */
 import { connect } from 'cloudflare:sockets';
 import { isValidUUID } from '../helpers/helpers';
 
@@ -151,12 +153,23 @@ async function handleTCPOutBound(
 
     // if the cf connect tcp socket have no incoming data, we retry to redirect ip
     async function retry() {
-        const EncodedPanelProxyIPs = globalThis.pathName.split('/')[2] || '';
+        let proxyIP, proxyIpPort;
+        const EncodedPanelProxyIPs = pathName.split('/')[2] || '';
         const proxyIPs = atob(EncodedPanelProxyIPs) || globalThis.proxyIPs;
         const finalProxyIPs = proxyIPs.split(',').map(ip => ip.trim());
-        const proxyIP = finalProxyIPs[Math.floor(Math.random() * finalProxyIPs.length)];
+        proxyIP = finalProxyIPs[Math.floor(Math.random() * finalProxyIPs.length)];
+        if (proxyIP.includes(']:')) {
+            const match = proxyIP.match(/^(\[.*?\]):(\d+)$/);
+            proxyIP = match[1];
+            proxyIpPort = +match[2];
+        }
 
-        const tcpSocket = await connectAndWrite(proxyIP || addressRemote, 443);
+        if (proxyIP.split(':').length === 2) {
+            proxyIP = proxyIP.split(':')[0];
+            proxyIpPort = +proxyIP.split(':')[1];
+        }
+
+        const tcpSocket = await connectAndWrite(proxyIP || addressRemote, proxyIpPort || portRemote);
         // no matter retry success or not, close websocket
         tcpSocket.closed
             .catch((error) => {
@@ -283,8 +296,7 @@ function processVLHeader(VLBuffer, userID) {
     // 0x01 TCP
     // 0x02 UDP
     // 0x03 MUX
-    if (command === 1) {
-    } else if (command === 2) {
+    if (command === 1) { /* empty */ } else if (command === 2) {
         isUDP = true;
     } else {
         return {
@@ -317,7 +329,7 @@ function processVLHeader(VLBuffer, userID) {
             addressValueIndex += 1;
             addressValue = new TextDecoder().decode(VLBuffer.slice(addressValueIndex, addressValueIndex + addressLength));
             break;
-        case 3:
+        case 3: {
             addressLength = 16;
             const dataView = new DataView(VLBuffer.slice(addressValueIndex, addressValueIndex + addressLength));
             // 2001:0db8:85a3:0000:0000:8a2e:0370:7334
@@ -328,6 +340,7 @@ function processVLHeader(VLBuffer, userID) {
             addressValue = ipv6.join(":");
             // seems no need add [] for ipv6
             break;
+        }
         default:
             return {
                 hasError: true,
@@ -524,7 +537,7 @@ async function handleUDPOutBound(webSocket, VLResponseHeader, log) {
             new WritableStream({
                 async write(chunk) {
                     const resp = await fetch(
-                        globalThis.dohURL, // dns server url
+                        dohURL, // dns server url
                         {
                             method: "POST",
                             headers: {
