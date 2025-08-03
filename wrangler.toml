@@ -1,0 +1,16 @@
+name = "p-l"
+main = "_worker.js"
+compatibility_date = "2025-07-23"
+
+keep_vars = true
+
+[observability.logs]
+enabled = true
+
+kv-namespaces = [
+{ binding = "kv", id = "97f74941a7794545be29668149682a1a" }
+]
+
+
+
+
